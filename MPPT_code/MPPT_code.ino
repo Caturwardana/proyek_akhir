@@ -3,8 +3,7 @@
 Program MPPT diadopsi dari program yang pernah dikembangkan oleh (Craene, 2021),
 dengan penambahan data logging serial monitor dan penambahan kalibrasi Ibat oleh saya (Wardana, 2023).
 ===============================================================================
-
-
+/*
   Wind Turbine MPTT Regulator
 
   _________________________________________________________________
@@ -111,6 +110,7 @@ int VpriMin = 0;           // the voltage that will start the MPPT process. Too 
 // to get the charging batteries current positive, values can be 1 or -1
 #define IbatPolarity  -1
 int Ioffset = 510;                // offset to get Ibat=0 with no current (~512)
+int Ioffsetpri = 510;                // offset to get Ibat=0 with no current (~512)
 
 // Other parameters
 //-----------------
@@ -257,6 +257,7 @@ void setup() {
   if (EEPROM.read(13) < 120) Vpri_calibrate = EEPROM.read(13); else EEPROM.write(13, Vpri_calibrate);
   if (EEPROM.read(14) < 120) Vsor_calibrate = EEPROM.read(14); else EEPROM.write(14, Vsor_calibrate);
   if (EEPROM.read(15) < 30)  Ioffset = EEPROM.read(15) + 500;  else EEPROM.write(15, (Ioffset - 500));
+  if (EEPROM.read(16) < 30)  Ioffsetpri = EEPROM.read(16) + 500;  else EEPROM.write(16, (Ioffsetpri - 500));
 #else
   EEPROM.write(0, USAGE_FPRI);
   EEPROM.write(3, VpriMin);
@@ -270,6 +271,7 @@ void setup() {
   EEPROM.write(13, Vpri_calibrate);
   EEPROM.write(14, Vsor_calibrate);
   EEPROM.write(15, (Ioffset - 500));
+  EEPROM.write(15, (Ioffsetpri - 500));
 #endif
 
   // Set clock divider for timer 2 at 1 = PWM frequency of 31372.55 Hz
@@ -349,7 +351,7 @@ void loop() {
     // -> current : 511 in bits is the 0mA, 0 in bits matches -Imax, 1023 matches +Imax
     Vpri = (somme_lect_Vpri / (float)analogReadsCount / 1024.0) * VpriMaxRef * (Vpri_calibrate / 100.0);
     Vsor = (somme_lect_Vsor / (float)analogReadsCount / 1024.0) * VpriMaxRef * (Vsor_calibrate / 100.0);
-    Ipri = ((somme_lect_Ipri / (float)analogReadsCount) - (float)Ioffset) * 5000.0 / convI / 1024.0;
+    Ipri = ((somme_lect_Ipri / (float)analogReadsCount) - (float)Ioffsetpri) * 5000.0 / convI / 1024.0;
     if ( Ipri < 0 ) Ipri = -Ipri;               // to be sure to get a positive value despite the way of wiring
     Ibat = ((somme_lect_Ibat / (float)analogReadsCount) - (float)Ioffset) * 5000.0 / convI / 1024.0;
     if ( Ibat < 0 ) Ibat = -Ibat;
@@ -656,6 +658,19 @@ void loop() {
       }  // end of window 12
 
       if ( window == 13 ) {
+        if (ret_push_button == 2) Ioffsetpri++;
+        if (ret_push_button == 3) Ioffsetpri--;
+        Ioffsetpri = constrain( Ioffsetpri, 500, 524 );
+        lcd.print("Ie=0 calibrate  ");
+        lcd.setCursor(0, 1);
+        dtostrf(Ioffsetpri, 3, 0, flt2str);
+        strcpy(lcdRow, flt2str); strcat(lcdRow, "  ->   ");
+        dtostrf(Ipri, 6, 2, flt2str);
+        strcat(lcdRow, flt2str);
+        lcd.print(lcdRow);
+      }  // end of window 13
+
+      if ( window == 14 ) {
         if (ret_push_button == 2) Ioffset++;
         if (ret_push_button == 3) Ioffset--;
         Ioffset = constrain( Ioffset, 500, 524 );
@@ -666,9 +681,9 @@ void loop() {
         dtostrf(Ibat, 6, 2, flt2str);
         strcat(lcdRow, flt2str);
         lcd.print(lcdRow);
-      }  // end of window 13
+      }  // end of window 14
 
-      if ( window == 14 ) {
+      if ( window == 15 ) {
         lcd.print("Debug mode view ");
         lcd.setCursor(0, 1);
         dtostrf(Step, 3, 0, flt2str);
@@ -677,7 +692,7 @@ void loop() {
         strcat(lcdRow, "   p: "); strcat(lcdRow, flt2str);
         lcd.print(lcdRow);
         count_before_timeout = 0;             // no timeout in debug mode
-      }  // end of window 14
+      }  // end of window 15
 
       // EEPROM updated if needed
       EEPROM.update(0, USAGE_FPRI);
@@ -692,6 +707,7 @@ void loop() {
       EEPROM.update(13, Vpri_calibrate);
       EEPROM.update(14, Vsor_calibrate);
       EEPROM.update(15, (Ioffset - 500));
+      EEPROM.update(16, (Ioffsetpri - 500));
     }    // end of parameters review
   }      // end of LCD display
 }        // end of loop
@@ -716,7 +732,7 @@ void Fpri_detect() {
 
 void next_window() {
 
-  window = (window + 1) % 15;       // next window - total number of windows to review +1
+  window = (window + 1) % 16;       // next window - total number of windows to review +1
   ret_push_button = 0;              // reset the buttun state
   lcd.setCursor(0, 0);
 }     // end of next_window function
@@ -752,3 +768,4 @@ byte push_button() {
   refresh_tempo = 1000;              // return back to usual display update duration
   return 0;
 }     // end of push_button function
+
